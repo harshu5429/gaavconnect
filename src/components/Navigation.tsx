@@ -1,6 +1,6 @@
-import { Map, TrendingUp, MessageSquare, Settings as SettingsIcon, Wifi, WifiOff, HelpCircle } from 'lucide-react';
+import { Map, TrendingUp, Settings as SettingsIcon, Wifi, WifiOff, HelpCircle } from 'lucide-react';
 
-type View = 'home' | 'route-result' | 'crowd-report' | 'admin' | 'settings' | 'help';
+type View = 'home' | 'route-result' | 'admin' | 'settings' | 'help';
 
 interface NavigationProps {
   currentView: View;
@@ -56,18 +56,6 @@ export function Navigation({ currentView, setCurrentView, isOfflineMode }: Navig
             >
               <Map className="w-5 h-5" />
               <span className="text-xs">Routes</span>
-            </button>
-            
-            <button
-              onClick={() => setCurrentView('crowd-report')}
-              className={`flex flex-col items-center gap-1 px-4 py-2 rounded-lg transition-colors ${
-                currentView === 'crowd-report'
-                  ? 'text-[#6A0DAD] bg-[#E6E6FA]'
-                  : 'text-gray-500'
-              }`}
-            >
-              <MessageSquare className="w-5 h-5" />
-              <span className="text-xs">Report</span>
             </button>
             
             <button

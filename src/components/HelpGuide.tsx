@@ -12,8 +12,10 @@ import {
   ChevronUp,
   Zap,
   Target,
-  Brain
+  Brain,
+  MessageCircle
 } from 'lucide-react';
+import { Chatbot } from './Chatbot';
 
 interface FAQItem {
   question: string;
@@ -67,6 +69,7 @@ const faqData: FAQItem[] = [
 export function HelpGuide() {
   const [activeCategory, setActiveCategory] = useState<string>('getting-started');
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
   const categories = [
     { id: 'getting-started', label: 'Getting Started', icon: Navigation },
@@ -92,6 +95,20 @@ export function HelpGuide() {
         <p className="text-gray-600 max-w-2xl mx-auto">
           Learn how to use GaavConnect's AI-powered route optimization to plan your perfect journey
         </p>
+        
+        {/* AI Assistant Button */}
+        <div className="mt-6">
+          <Button
+            onClick={() => setIsChatbotOpen(true)}
+            className="bg-[#6A0DAD] hover:bg-[#8B2DC2] text-white shadow-lg"
+          >
+            <MessageCircle className="w-5 h-5 mr-2" />
+            Ask AI Assistant
+          </Button>
+          <p className="text-sm text-gray-500 mt-2">
+            Get instant answers about features, troubleshooting, and more
+          </p>
+        </div>
       </div>
 
       {/* Quick Start Guide */}
@@ -226,15 +243,43 @@ export function HelpGuide() {
         <p className="text-gray-600 mb-4">
           Can't find what you're looking for? Our support team is here to help!
         </p>
+        
+        {/* Contact Details */}
+        <div className="mb-6 p-4 bg-white rounded-lg border border-[#E6E6FA]">
+          <h4 className="font-semibold text-[#6A0DAD] mb-3">Contact Details</h4>
+          <div className="space-y-2">
+            <div className="flex items-center justify-center gap-2">
+              <MessageCircle className="w-4 h-4 text-[#6A0DAD]" />
+              <span className="text-gray-700">Email Support:</span>
+              <a 
+                href="mailto:chotubhai0944@gmail.com" 
+                className="text-[#6A0DAD] hover:text-[#8B2DC2] font-medium underline"
+              >
+                chotubhai0944@gmail.com
+              </a>
+            </div>
+            <p className="text-sm text-gray-500 mt-2">
+              📧 We typically respond within 24 hours
+            </p>
+          </div>
+        </div>
+        
         <div className="flex flex-wrap gap-3 justify-center">
-          <Button className="bg-[#6A0DAD] hover:bg-[#8B2DC2] text-white">
-            Contact Support
-          </Button>
-          <Button variant="outline" className="border-[#6A0DAD] text-[#6A0DAD] hover:bg-purple-50">
-            Report Issue
+          <Button 
+            onClick={() => window.open('mailto:chotubhai0944@gmail.com?subject=GaavConnect Support Request', '_blank')}
+            className="bg-[#6A0DAD] hover:bg-[#8B2DC2] text-white"
+          >
+            <MessageCircle className="w-4 h-4 mr-2" />
+            Email Support
           </Button>
         </div>
       </Card>
+
+      {/* Chatbot Integration */}
+      <Chatbot 
+        isOpen={isChatbotOpen} 
+        onToggle={() => setIsChatbotOpen(!isChatbotOpen)} 
+      />
     </div>
   );
 }

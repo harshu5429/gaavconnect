@@ -3,7 +3,7 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { Card } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { TrendingUp, Users, MapPin, Activity } from 'lucide-react';
-import { getStats, getRecentRoutes } from '../utils/api';
+import { getStats } from '../utils/api';
 import type { Stats } from '../utils/api';
 
 const routeUsageData = [
@@ -18,13 +18,6 @@ const routeUsageData = [
 
 
 
-const topRoutesData = [
-  { route: 'Rampur → Sundarpur', count: 156, avgCost: 45 },
-  { route: 'Madhavpur → Laxmipur', count: 143, avgCost: 38 },
-  { route: 'Ganeshpur → Ramgarh', count: 128, avgCost: 52 },
-  { route: 'Vidyanagar → Shivpuri', count: 112, avgCost: 41 },
-  { route: 'Krishna Nagar → Govindpur', count: 98, avgCost: 35 },
-];
 
 const crowdReportsData = [
   { week: 'Week 1', reports: 23, verified: 18 },
@@ -264,36 +257,6 @@ export function AdminDashboard() {
         </TabsContent>
       </Tabs>
 
-      {/* Top Routes Table */}
-      <Card className="p-6 border-[#E6E6FA]">
-        <h3 className="text-[#6A0DAD] mb-4">Most Popular Routes</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-[#E6E6FA]">
-                <th className="text-left py-3 px-4 text-sm text-gray-600">Rank</th>
-                <th className="text-left py-3 px-4 text-sm text-gray-600">Route</th>
-                <th className="text-left py-3 px-4 text-sm text-gray-600">Searches</th>
-                <th className="text-left py-3 px-4 text-sm text-gray-600">Avg Cost</th>
-              </tr>
-            </thead>
-            <tbody>
-              {topRoutesData.map((route, idx) => (
-                <tr key={idx} className="border-b border-[#E6E6FA] hover:bg-[#F5F3FF] transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="w-8 h-8 bg-[#6A0DAD] text-white rounded-full flex items-center justify-center">
-                      {idx + 1}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-gray-700">{route.route}</td>
-                  <td className="py-3 px-4 text-gray-700">{route.count}</td>
-                  <td className="py-3 px-4 text-[#6A0DAD]">₹{route.avgCost}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </div>
   );
 }

@@ -53,6 +53,19 @@
     build: {
       target: 'esnext',
       outDir: 'build',
+      sourcemap: false,
+      minify: 'terser',
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom'],
+            ui: ['@radix-ui/react-accordion', '@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu'],
+            charts: ['recharts'],
+            utils: ['date-fns', 'class-variance-authority']
+          }
+        }
+      }
     },
     server: {
       port: 3000,

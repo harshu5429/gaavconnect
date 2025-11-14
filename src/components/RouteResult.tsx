@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Progress } from './ui/progress';
 import { MapView } from './MapView';
 import { RouteExport } from './RouteExport';
+import { RouteDetails } from './RouteDetails';
+import { OSRMProfessionalFeatures } from './OSRMProfessionalFeatures';
 import { toast } from 'sonner';
 import { saveRoute } from '../utils/api';
 import type { OptimizedRoute } from '../App';
@@ -173,15 +175,91 @@ export function RouteResult({ route, allRoutes = [], onBack }: RouteResultProps)
         </Card>
       </div>
 
-      {/* Interactive Map */}
-      <Card className="p-4 mb-6 border-[#E6E6FA] shadow-md">
-        <h3 className="text-[#6A0DAD] mb-4">Route Visualization</h3>
+      {/* Enhanced Interactive Map with OSRM Integration */}
+      <Card className="bg-card text-card-foreground flex flex-col gap-6 rounded-xl border p-4 mb-6 border-[#E6E6FA] shadow-md">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-[#6A0DAD] font-semibold flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              OSRM Route Visualization
+            </h3>
+            <p className="text-sm text-gray-600">
+              Interactive map with professional route optimization
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Badge className="bg-green-100 text-green-700">
+              ✅ Optimized
+            </Badge>
+            <Badge className="bg-blue-100 text-blue-700">
+              🗺️ {currentRoute.algorithm.toUpperCase()}
+            </Badge>
+          </div>
+        </div>
+
+        {/* OSRM Route Features */}
+        <div className="bg-gradient-to-r from-[#F5F3FF] to-[#E6E6FA] p-3 rounded-lg border border-[#CBA0F5]">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-[#6A0DAD] rounded-full flex items-center justify-center">
+                <MapPin className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <div className="font-medium text-[#6A0DAD]">{currentRoute.totalDistance}</div>
+                <div className="text-xs text-gray-600">Total Distance</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-[#CBA0F5] rounded-full flex items-center justify-center">
+                <Clock className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <div className="font-medium text-[#6A0DAD]">{currentRoute.totalDuration}</div>
+                <div className="text-xs text-gray-600">Travel Time</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-[#B57EDC] rounded-full flex items-center justify-center">
+                <DollarSign className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <div className="font-medium text-[#6A0DAD]">₹{currentRoute.totalCost}</div>
+                <div className="text-xs text-gray-600">Estimated Cost</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-[#8B2DC2] rounded-full flex items-center justify-center">
+                <TrendingUp className="w-4 h-4 text-white" />
+              </div>
+              <div>
+                <div className="font-medium text-[#6A0DAD]">{currentRoute.stops.length}</div>
+                <div className="text-xs text-gray-600">Destinations</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <MapView 
           origin={currentRoute.segments[0]?.from} 
           stops={currentRoute.stops} 
           showRoute={true} 
-          height="400px" 
+          height="450px" 
         />
+
+        {/* OSRM Status Footer */}
+        <div className="bg-[#F5F3FF] p-3 rounded-lg border border-[#E6E6FA]">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-gray-600">OSRM API Integration Active</span>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              <span>🎯 TSP Optimized</span>
+              <span>🛣️ Real Roads</span>
+              <span>⚡ Live Routing</span>
+            </div>
+          </div>
+        </div>
       </Card>
 
       {/* Tabs */}
@@ -192,6 +270,9 @@ export function RouteResult({ route, allRoutes = [], onBack }: RouteResultProps)
           </TabsTrigger>
           <TabsTrigger value="alternatives" className="flex-1 data-[state=active]:bg-[#6A0DAD] data-[state=active]:text-white">
             Alternatives
+          </TabsTrigger>
+          <TabsTrigger value="osrm" className="flex-1 data-[state=active]:bg-[#6A0DAD] data-[state=active]:text-white">
+            OSRM Features
           </TabsTrigger>
         </TabsList>
 
@@ -304,6 +385,26 @@ export function RouteResult({ route, allRoutes = [], onBack }: RouteResultProps)
             ))}
           </div>
         </TabsContent>
+
+        <TabsContent value="osrm" className="mt-6">
+          <RouteDetails 
+            route={{
+              distance: parseFloat(currentRoute.totalDistance.replace(' km', '')) * 1000,
+              duration: parseInt(currentRoute.totalDuration.replace(/[^\d]/g, '')) * 60,
+              geometry: '',
+              legs: [],
+              weight_name: 'duration',
+              weight: 0
+            }}
+            waypoints={currentRoute.stops.map((stop) => ({
+              hint: '',
+              distance: 0,
+              name: stop.name,
+              location: [stop.lng, stop.lat]
+            }))}
+            coordinates={currentRoute.stops.map(stop => ({ lat: stop.lat, lng: stop.lng }))}
+          />
+        </TabsContent>
       </Tabs>
 
       {/* Route Optimization Note */}
@@ -333,6 +434,19 @@ export function RouteResult({ route, allRoutes = [], onBack }: RouteResultProps)
           </div>
         </div>
       </Card>
+
+      {/* OSRM Professional Features */}
+      <OSRMProfessionalFeatures
+        coordinates={currentRoute.stops.map(stop => ({
+          lat: stop.lat,
+          lng: stop.lng
+        }))}
+        onRouteCalculated={(routeData) => {
+          console.log('OSRM Professional Route Calculated:', routeData);
+          toast.success('Professional OSRM route optimization completed!');
+        }}
+        className="mb-6"
+      />
 
       {/* Route Export & Sharing */}
       <RouteExport route={currentRoute} allRoutes={allRoutes} />

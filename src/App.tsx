@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Home } from './components/Home';
 import { RouteResult } from './components/RouteResult';
-import { CrowdReport } from './components/CrowdReport';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Settings } from './components/Settings';
@@ -13,13 +12,22 @@ import { SignupPage } from './components/SignupPage';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
-type View = 'home' | 'route-result' | 'crowd-report' | 'admin' | 'settings' | 'help';
+type View = 'home' | 'route-result' | 'admin' | 'settings' | 'help';
+
+export interface Coordinate {
+  lat: number;
+  lng: number;
+  label?: string; // Optional label for the specific coordinate (e.g., "Main Entrance", "Parking Area")
+}
 
 export interface Stop {
   id: string;
   name: string;
   lat: number;
   lng: number;
+  // Enhanced: Support multiple coordinates per destination
+  coordinates?: Coordinate[]; // Array of possible coordinates for this destination
+  selectedCoordinateIndex?: number; // Index of the currently selected coordinate
 }
 
 export interface RouteSegment {
@@ -133,10 +141,6 @@ function AppContent() {
             allRoutes={allRoutes}
             onBack={handleBackToHome}
           />
-        )}
-        
-        {currentView === 'crowd-report' && (
-          <CrowdReport />
         )}
         
         {currentView === 'admin' && (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapPin, Navigation } from 'lucide-react';
 import type { Stop } from '../App';
+import { getOptimizedTrip, type OSRMCoordinate } from '../utils/osrmApi';
 
 interface MapViewProps {
   origin?: string;
@@ -204,97 +205,218 @@ export function MapView({
     }
   }, [googleMapsLoaded, origin, stops, showRoute]);
 
-  // Function to calculate optimal route using Google Directions API
+  // Function to calculate optimal route using OSRM API
   const calculateOptimalRoute = async (map: any) => {
     if (!window.google?.maps || !origin || stops.length === 0) return;
 
     try {
-      const directionsService = new window.google.maps.DirectionsService();
-      const directionsRenderer = new window.google.maps.DirectionsRenderer({
-        suppressMarkers: true, // We'll use our custom markers
-        polylineOptions: {
-          strokeColor: '#6A0DAD',
-          strokeWeight: 4,
-          strokeOpacity: 0.8
-        }
-      });
-
-      directionsRenderer.setMap(map);
-
       // Default coordinates for origin
       const DEFAULT_LAT = 17.3850;
       const DEFAULT_LNG = 78.4867;
       
       const originCoords = { lat: DEFAULT_LAT, lng: DEFAULT_LNG };
 
-      // Prepare waypoints (all destinations except the last one)
-      const waypoints = stops.slice(0, -1).map(stop => ({
-        location: { 
-          lat: stop.lat || (DEFAULT_LAT + (Math.random() - 0.5) * 0.1), 
+      // Prepare coordinates for OSRM API
+      const coordinates: OSRMCoordinate[] = [
+        originCoords,
+        ...stops.map(stop => ({
+          lat: stop.lat || (DEFAULT_LAT + (Math.random() - 0.5) * 0.1),
           lng: stop.lng || (DEFAULT_LNG + (Math.random() - 0.5) * 0.1)
-        },
-        stopover: true
-      }));
+        }))
+      ];
 
-      // Last stop as destination
-      const lastStop = stops[stops.length - 1];
-      const destinationCoords = { 
-        lat: lastStop.lat || (DEFAULT_LAT + (Math.random() - 0.5) * 0.1), 
-        lng: lastStop.lng || (DEFAULT_LNG + (Math.random() - 0.5) * 0.1)
-      };
-
-      const request = {
-        origin: originCoords,
-        destination: destinationCoords,
-        waypoints: waypoints,
-        optimizeWaypoints: true, // This finds the optimal order
-        travelMode: window.google.maps.TravelMode.DRIVING,
-        unitSystem: window.google.maps.UnitSystem.METRIC,
-        avoidHighways: false,
-        avoidTolls: false
-      };
-
-      directionsService.route(request, (result: any, status: any) => {
-        if (status === 'OK' && result) {
-          directionsRenderer.setDirections(result);
-          
-          // Display route information
-          const route = result.routes[0];
-          
-          console.log('✅ Optimal route calculated:');
-          console.log(`📍 Distance: ${route.legs.reduce((total: number, leg: any) => total + leg.distance.value, 0) / 1000} km`);
-          console.log(`⏱️ Duration: ${route.legs.reduce((total: number, leg: any) => total + leg.duration.value, 0) / 60} minutes`);
-          
-          // Show route info window
-          const routeInfoWindow = new window.google.maps.InfoWindow({
-            content: `
-              <div style="padding: 12px; min-width: 200px;">
-                <h4 style="margin: 0 0 8px 0; color: #6A0DAD;">🗺️ Optimal Route</h4>
-                <p style="margin: 4px 0;"><strong>📍 Distance:</strong> ${(route.legs.reduce((total: number, leg: any) => total + leg.distance.value, 0) / 1000).toFixed(1)} km</p>
-                <p style="margin: 4px 0;"><strong>⏱️ Duration:</strong> ${Math.round(route.legs.reduce((total: number, leg: any) => total + leg.duration.value, 0) / 60)} minutes</p>
-                <p style="margin: 4px 0;"><strong>🚗 Mode:</strong> Driving</p>
-                <small style="color: #666;">Route optimized for shortest time</small>
-              </div>
-            `,
-            position: route.overview_path[Math.floor(route.overview_path.length / 2)]
-          });
-
-          // Show info window after a delay
-          setTimeout(() => {
-            routeInfoWindow.open(map);
-          }, 1000);
-
-        } else {
-          console.warn('Directions request failed:', status);
-          // Fallback to simple polyline if directions fail
-          drawSimpleRoute(map);
-        }
+      console.log('🗺️ Calculating optimal route with OSRM API...');
+      
+      // Get optimized trip from OSRM
+      const tripData = await getOptimizedTrip(coordinates, {
+        steps: true,
+        overview: 'full',
+        geometries: 'polyline'
       });
 
+      if (tripData.trips.length === 0) {
+        throw new Error('No route found');
+      }
+
+      const trip = tripData.trips[0];
+      
+      // Clear existing route polyline
+      if (routePolylineRef.current) {
+        routePolylineRef.current.setMap(null);
+      }
+
+      // Decode and display the route
+      const decodedPath = decodePolyline(trip.geometry);
+      const googleMapsPath = decodedPath.map(([lat, lng]) => ({ lat, lng }));
+
+      // Create enhanced polyline for the route
+      const routePolyline = new window.google.maps.Polyline({
+        path: googleMapsPath,
+        geodesic: true,
+        strokeColor: '#6A0DAD',
+        strokeOpacity: 0.8,
+        strokeWeight: 5,
+        icons: [{
+          icon: {
+            path: window.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+            scale: 4,
+            fillColor: '#6A0DAD',
+            fillOpacity: 1,
+            strokeColor: '#FFFFFF',
+            strokeWeight: 2
+          },
+          offset: '0%',
+          repeat: '40px'
+        }]
+      });
+
+      // Add waypoint markers with enhanced styling
+      tripData.waypoints.forEach((waypoint, index) => {
+        const isOrigin = index === 0;
+        const isDestination = index === tripData.waypoints.length - 1;
+        
+        let markerColor = '#6A0DAD';
+        let markerLabel = (index + 1).toString();
+        let markerTitle = `Waypoint ${index + 1}`;
+        
+        if (isOrigin) {
+          markerColor = '#22C55E';
+          markerLabel = 'S';
+          markerTitle = 'Start Point';
+        } else if (isDestination) {
+          markerColor = '#EF4444';
+          markerLabel = 'E';
+          markerTitle = 'End Point';
+        }
+
+        const waypointMarker = new window.google.maps.Marker({
+          position: {
+            lat: waypoint.location[1],
+            lng: waypoint.location[0]
+          },
+          map: map,
+          title: markerTitle,
+          icon: {
+            path: window.google.maps.SymbolPath.CIRCLE,
+            scale: 12,
+            fillColor: markerColor,
+            fillOpacity: 1,
+            strokeColor: '#FFFFFF',
+            strokeWeight: 3
+          },
+          label: {
+            text: markerLabel,
+            color: '#FFFFFF',
+            fontWeight: 'bold',
+            fontSize: '12px'
+          },
+          zIndex: 1000
+        });
+
+        // Add info window for waypoint details
+        const waypointInfo = new window.google.maps.InfoWindow({
+          content: `
+            <div style="padding: 8px; min-width: 150px;">
+              <h4 style="margin: 0 0 4px 0; color: ${markerColor};">${markerTitle}</h4>
+              <p style="margin: 2px 0; font-size: 12px;"><strong>Name:</strong> ${waypoint.name || 'Unnamed location'}</p>
+              <p style="margin: 2px 0; font-size: 12px;"><strong>Coordinates:</strong> ${waypoint.location[1].toFixed(4)}, ${waypoint.location[0].toFixed(4)}</p>
+              ${waypoint.distance ? `<p style="margin: 2px 0; font-size: 12px;"><strong>Distance from route:</strong> ${waypoint.distance.toFixed(0)}m</p>` : ''}
+            </div>
+          `
+        });
+
+        waypointMarker.addListener('click', () => {
+          waypointInfo.open(map, waypointMarker);
+        });
+
+        markersRef.current.push(waypointMarker);
+      });
+
+      routePolyline.setMap(map);
+      routePolylineRef.current = routePolyline;
+
+      // Display route information
+      console.log('✅ OSRM Optimal route calculated:');
+      console.log(`📍 Distance: ${(trip.distance / 1000).toFixed(1)} km`);
+      console.log(`⏱️ Duration: ${Math.round(trip.duration / 60)} minutes`);
+      
+      // Show enhanced route info window
+      const midPoint = googleMapsPath[Math.floor(googleMapsPath.length / 2)];
+      const routeInfoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 12px; min-width: 220px; font-family: Arial, sans-serif;">
+            <h4 style="margin: 0 0 8px 0; color: #6A0DAD; display: flex; align-items: center; gap: 8px;">
+              🗺️ OSRM Optimized Route
+            </h4>
+            <div style="background: #F5F3FF; padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+              <p style="margin: 4px 0; font-weight: 500;"><strong>📍 Distance:</strong> ${(trip.distance / 1000).toFixed(1)} km</p>
+              <p style="margin: 4px 0; font-weight: 500;"><strong>⏱️ Duration:</strong> ${Math.round(trip.duration / 60)} minutes</p>
+              <p style="margin: 4px 0; font-weight: 500;"><strong>🚗 Mode:</strong> Driving</p>
+            </div>
+            <div style="font-size: 12px; color: #666; text-align: center;">
+              <div style="margin-bottom: 4px;">✨ Route optimized with OSRM</div>
+              <div>🎯 Solves Traveling Salesman Problem</div>
+            </div>
+          </div>
+        `,
+        position: midPoint
+      });
+
+      // Show info window after a delay
+      setTimeout(() => {
+        routeInfoWindow.open(map);
+      }, 1000);
+
+      // Fit map bounds to show entire route
+      const bounds = new window.google.maps.LatLngBounds();
+      googleMapsPath.forEach(point => bounds.extend(point));
+      map.fitBounds(bounds);
+
     } catch (error) {
-      console.error('Error calculating route:', error);
+      console.error('❌ OSRM route calculation failed:', error);
+      console.log('🔄 Falling back to simple route visualization...');
+      // Fallback to simple polyline if OSRM fails
       drawSimpleRoute(map);
     }
+  };
+
+  // Helper function to decode polyline (same as in osrmApi.ts but local for map component)
+  const decodePolyline = (encoded: string): Array<[number, number]> => {
+    const coordinates: Array<[number, number]> = [];
+    let index = 0;
+    let lat = 0;
+    let lng = 0;
+
+    while (index < encoded.length) {
+      let shift = 0;
+      let result = 0;
+      let byte: number;
+
+      do {
+        byte = encoded.charCodeAt(index++) - 63;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20);
+
+      const deltaLat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+      lat += deltaLat;
+
+      shift = 0;
+      result = 0;
+
+      do {
+        byte = encoded.charCodeAt(index++) - 63;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20);
+
+      const deltaLng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+      lng += deltaLng;
+
+      coordinates.push([lat / 1e5, lng / 1e5]);
+    }
+
+    return coordinates;
   };
 
   // Fallback function to draw simple route lines

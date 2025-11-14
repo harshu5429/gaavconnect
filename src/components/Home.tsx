@@ -1,16 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { Card } from './ui/card';
+import { OSRMProfessionalFeatures } from './OSRMProfessionalFeatures';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { MapPin, Plus, Navigation, Sparkles, Loader2, Trash2, Route, Clock, DollarSign } from 'lucide-react';
+import { MapPin, Plus, Navigation, Sparkles, Loader2, Route, Clock, DollarSign } from 'lucide-react';
 import { LocationInput } from './LocationInput';
 import { MapView } from './MapView';
 import { SegmentDetails } from './SegmentDetails';
 import { RouteOptimizationLoader } from './LoadingSpinner';
+import { MultiCoordinateSelector } from './MultiCoordinateSelector';
 import { toast } from 'sonner';
 import { calculateDistance, estimateTravelTime, calculateFare } from '../utils/distance';
 import { solveTSP, nearestNeighborTSP } from '../utils/tspSolver';
 import { reverseGeocode, getCurrentPosition, calculateRealTimeDistance, validateCoordinates } from '../utils/geocoding';
+import { getOptimizedTrip, formatDistance, formatDuration, type OSRMCoordinate } from '../utils/osrmApi';
 import type { Stop, OptimizedRoute } from '../App';
 import type { PlaceDetails } from '../utils/placesAutocomplete';
 
@@ -223,6 +226,69 @@ const generateMultipleRoutes = async (
       console.error('❌ TSP Genetic Algorithm failed:', error);
       // Continue without genetic algorithm route
     }
+
+    // Route 4: OSRM Optimized Route (with error handling)
+    try {
+      console.log('🗺️ Running OSRM Route Optimization...');
+      
+      const coordinates: OSRMCoordinate[] = allPoints.map(point => ({
+        lat: point.lat,
+        lng: point.lng
+      }));
+
+      // Try both standard and roundtrip optimization
+      const osrmTrip = await getOptimizedTrip(coordinates, {
+        steps: true,
+        overview: 'full',
+        roundtrip: false
+      });
+
+      if (osrmTrip.trips.length > 0) {
+        const trip = osrmTrip.trips[0];
+        
+        // Convert OSRM waypoints back to stops order
+        const osrmOrderedStops = osrmTrip.waypoints
+          .slice(1) // Remove origin
+          .map((waypoint) => {
+            // Find corresponding stop based on coordinates
+            const waypointLat = waypoint.location[1]; // OSRM returns [lng, lat]
+            const waypointLng = waypoint.location[0];
+            
+            // Find closest stop to this waypoint
+            let closestStop = stops[0];
+            let minDistance = Infinity;
+            
+            stops.forEach(stop => {
+              const distance = Math.abs(stop.lat - waypointLat) + Math.abs(stop.lng - waypointLng);
+              if (distance < minDistance) {
+                minDistance = distance;
+                closestStop = stop;
+              }
+            });
+            
+            return closestStop;
+          });
+
+        // Generate segments for OSRM route
+        const osrmOrderedPoints = [originPoint, ...osrmOrderedStops];
+        const { segments: osrmSegments, totalCost: osrmCost } = 
+          generateRouteSegments(osrmOrderedPoints, 'auto');
+
+        routes.push({
+          stops: osrmOrderedStops,
+          segments: osrmSegments,
+          totalDistance: formatDistance(trip.distance),
+          totalCost: Math.round(osrmCost),
+          totalDuration: formatDuration(trip.duration),
+          algorithm: 'tsp-aco', // Using ACO as identifier for OSRM
+        });
+
+        console.log('✅ OSRM route optimization completed');
+      }
+    } catch (error) {
+      console.error('❌ OSRM route optimization failed:', error);
+      // Continue without OSRM route
+    }
   }
   
   // Ensure we always have at least one route
@@ -369,6 +435,10 @@ export function Home({ onRouteGenerated }: HomeProps) {
     }
   };
 
+  const updateStop = (stopId: string, updatedStop: Stop) => {
+    setStops(stops.map(s => s.id === stopId ? updatedStop : s));
+  };
+
   const generateRoute = async () => {
     if (!origin.trim()) {
       toast.error('Please enter an origin');
@@ -505,70 +575,102 @@ export function Home({ onRouteGenerated }: HomeProps) {
           )}
         </div>
 
-        {/* Stops List */}
+        {/* Enhanced Stops List with Multiple Coordinates */}
         {stops.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-gray-700">Added Destinations:</h4>
-            {stops.map((stop, index) => (
-              <div
+          <div className="space-y-4">
+            <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <MapPin className="w-4 h-4" />
+              Added Destinations ({stops.length}):
+            </h4>
+            {stops.map((stop) => (
+              <MultiCoordinateSelector
                 key={stop.id}
-                className="flex items-center justify-between p-3 bg-[#F5F3FF] rounded-lg border border-[#E6E6FA]"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-[#6A0DAD] text-white rounded-full flex items-center justify-center text-sm font-bold">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-800">{stop.name}</p>
-                    <p className="text-xs text-gray-500">
-                      {stop.lat !== 0 && stop.lng !== 0 
-                        ? `📍 ${stop.lat.toFixed(4)}, ${stop.lng.toFixed(4)}`
-                        : 'Coordinates pending...'}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => removeStop(stop.id)}
-                  variant="outline"
-                  size="sm"
-                  className="text-red-500 border-red-200 hover:bg-red-50"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
+                stop={stop}
+                onStopUpdate={(updatedStop) => updateStop(stop.id, updatedStop)}
+                onRemoveStop={() => removeStop(stop.id)}
+              />
             ))}
           </div>
         )}
       </Card>
 
-      {/* Map Preview - Dynamic Route Generation */}
+      {/* Enhanced Map Preview with OSRM Integration */}
       {(origin || stops.length > 0) && (
-        <Card className="p-4 mb-6 border-[#E6E6FA] shadow-md">
-          <div className="flex items-center justify-between mb-3">
+        <Card className="bg-card text-card-foreground flex flex-col gap-6 rounded-xl border p-4 mb-6 border-[#E6E6FA] shadow-md">
+          <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-[#6A0DAD] font-semibold">Route Map</h3>
+              <h3 className="text-[#6A0DAD] font-semibold flex items-center gap-2">
+                <Navigation className="w-5 h-5" />
+                OSRM-Powered Route Map
+              </h3>
               <p className="text-sm text-gray-600">
                 {stops.length > 0 
-                  ? `Your journey with ${stops.length} destination${stops.length !== 1 ? 's' : ''}`
-                  : "Add destinations to generate your route"
+                  ? `Professional route optimization with ${stops.length} destination${stops.length !== 1 ? 's' : ''}`
+                  : "Add destinations to generate OSRM-optimized routes"
                 }
               </p>
             </div>
             {stops.length > 0 && (
-              <Badge className="bg-purple-100 text-purple-700">
-                🗺️ {stops.length} stop{stops.length !== 1 ? 's' : ''}
-              </Badge>
+              <div className="flex gap-2">
+                <Badge className="bg-green-100 text-green-700">
+                  🗺️ OSRM Active
+                </Badge>
+                <Badge className="bg-purple-100 text-purple-700">
+                  {stops.length} stop{stops.length !== 1 ? 's' : ''}
+                </Badge>
+              </div>
             )}
           </div>
+
+          {/* OSRM Features Info */}
+          {stops.length > 0 && (
+            <div className="bg-gradient-to-r from-[#F5F3FF] to-[#E6E6FA] p-3 rounded-lg border border-[#CBA0F5]">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-4 h-4 text-[#6A0DAD]" />
+                <span className="text-sm font-medium text-[#6A0DAD]">OSRM Enhanced Features</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-600">
+                <div className="flex items-center gap-1">
+                  <Route className="w-3 h-3" />
+                  Real road networks
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Optimized timing
+                </div>
+                <div className="flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  TSP optimization
+                </div>
+                <div className="flex items-center gap-1">
+                  <Navigation className="w-3 h-3" />
+                  Turn-by-turn ready
+                </div>
+              </div>
+            </div>
+          )}
+
           <MapView 
             origin={origin} 
             stops={stops} 
             showRoute={stops.length > 0} 
-            height="350px" 
+            height="400px" 
           />
+          
           {stops.length > 0 && (
-            <div className="mt-3 text-sm text-gray-500 text-center">
-              📍 Route automatically generated from {origin || 'start point'} through all destinations
+            <div className="bg-[#F5F3FF] p-3 rounded-lg border border-[#E6E6FA]">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2 text-gray-600">
+                  <div className="w-2 h-2 bg-[#6A0DAD] rounded-full animate-pulse"></div>
+                  Route powered by OSRM API
+                </div>
+                <div className="text-[#6A0DAD] font-medium">
+                  📍 {origin || 'Start'} → {stops.length} destinations
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                ✨ Professional-grade routing with real-world road network optimization
+              </p>
             </div>
           )}
         </Card>
@@ -765,6 +867,29 @@ export function Home({ onRouteGenerated }: HomeProps) {
             origin={origin}
             originDetails={originDetails}
             stops={stops}
+          />
+        </div>
+      )}
+
+      {/* OSRM Professional Features - Advanced Route Optimization */}
+      {stops.length >= 2 && (
+        <div className="mt-8 pt-8 border-t-2 border-[#E6E6FA]">
+          <OSRMProfessionalFeatures
+            coordinates={[
+              ...(originDetails ? [{
+                lat: originDetails.geometry.location.lat,
+                lng: originDetails.geometry.location.lng
+              }] : []),
+              ...stops.map(stop => ({
+                lat: stop.lat,
+                lng: stop.lng
+              }))
+            ]}
+            onRouteCalculated={(routeData) => {
+              console.log('OSRM Professional Route Calculated:', routeData);
+              toast.success('Professional OSRM route optimization completed!');
+            }}
+            className="animate-fadeIn"
           />
         </div>
       )}
