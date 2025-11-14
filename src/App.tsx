@@ -46,7 +46,7 @@ export interface OptimizedRoute {
   totalCost: number;
   totalDuration: string;
   totalDistance: string;
-  algorithm: 'tsp-genetic' | 'tsp-aco' | 'greedy' | 'nearest-neighbor';
+  algorithm: 'tsp-genetic' | 'tsp-aco' | 'greedy' | 'nearest-neighbor' | 'direct';
 }
 
 export interface RouteOptions {

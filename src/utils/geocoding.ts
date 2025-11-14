@@ -14,15 +14,49 @@ export interface GeocodingResult {
 }
 
 /**
+ * Helper function to make CORS-enabled requests using a proxy
+ */
+async function fetchWithCORS(url: string, options: RequestInit = {}): Promise<Response> {
+  // Try direct request first (might work in some environments)
+  try {
+    const response = await fetch(url, {
+      ...options,
+      mode: 'cors'
+    });
+    return response;
+  } catch (corsError) {
+    console.warn('Direct CORS request failed, trying proxy:', corsError);
+  }
+
+  // Fallback to CORS proxy
+  const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
+  try {
+    const response = await fetch(proxyUrl, options);
+    return response;
+  } catch (proxyError) {
+    console.warn('Proxy request failed, trying Nominatim mirror:', proxyError);
+  }
+
+  // Final fallback to a different Nominatim mirror that supports CORS
+  const mirrorUrl = url.replace('nominatim.openstreetmap.org', 'nominatim.openstreetmap.franklin.dev');
+  const response = await fetch(mirrorUrl, {
+    ...options,
+    mode: 'cors'
+  });
+  
+  return response;
+}
+
+/**
  * Reverse geocode coordinates to get location details
- * Uses Nominatim (OpenStreetMap) as primary service
+ * Uses multiple services with CORS fallbacks
  */
 export async function reverseGeocode(lat: number, lng: number): Promise<GeocodingResult> {
   try {
     // Primary: Nominatim (OpenStreetMap) - Free and reliable
     const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
     
-    const response = await fetch(nominatimUrl, {
+    const response = await fetchWithCORS(nominatimUrl, {
       headers: {
         'User-Agent': 'GaavConnect/1.0 (Rural Transport App)'
       }
@@ -54,7 +88,28 @@ export async function reverseGeocode(lat: number, lng: number): Promise<Geocodin
   } catch (error) {
     console.warn('Primary geocoding failed, using fallback:', error);
     
-    // Fallback: Return coordinates with basic formatting
+    // Fallback: Try BigDataCloud API (supports CORS)
+    try {
+      const bigDataUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
+      const response = await fetch(bigDataUrl);
+      
+      if (response.ok) {
+        const data = await response.json();
+        return {
+          place_id: `bigdata_${lat}_${lng}`,
+          name: data.locality || data.city || 'Unknown Location',
+          formatted_address: data.formatted || `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+          geometry: {
+            location: { lat, lng }
+          },
+          types: ['establishment']
+        };
+      }
+    } catch (bigDataError) {
+      console.warn('BigDataCloud fallback failed:', bigDataError);
+    }
+    
+    // Final fallback: Return coordinates with basic formatting
     return {
       place_id: `fallback_${lat}_${lng}`,
       name: 'Current Location',
@@ -69,14 +124,14 @@ export async function reverseGeocode(lat: number, lng: number): Promise<Geocodin
 
 /**
  * Forward geocode address to get coordinates
- * Uses Nominatim for address search
+ * Uses multiple services with CORS fallbacks
  */
 export async function forwardGeocode(address: string): Promise<GeocodingResult[]> {
   try {
     const encodedAddress = encodeURIComponent(address);
     const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=5&addressdetails=1`;
     
-    const response = await fetch(nominatimUrl, {
+    const response = await fetchWithCORS(nominatimUrl, {
       headers: {
         'User-Agent': 'GaavConnect/1.0 (Rural Transport App)'
       }
@@ -102,7 +157,35 @@ export async function forwardGeocode(address: string): Promise<GeocodingResult[]
     }));
     
   } catch (error) {
-    console.error('Forward geocoding failed:', error);
+    console.warn('Nominatim forward geocoding failed, trying fallback:', error);
+    
+    // Fallback: Try BigDataCloud API
+    try {
+      const bigDataUrl = `https://api.bigdatacloud.net/data/reverse-geocode-client?localityLanguage=en&search=${encodeURIComponent(address)}`;
+      const response = await fetch(bigDataUrl);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.formatted) {
+          return [{
+            place_id: `bigdata_search_${Date.now()}`,
+            name: data.locality || data.city || address,
+            formatted_address: data.formatted,
+            geometry: {
+              location: { 
+                lat: data.latitude || 0, 
+                lng: data.longitude || 0 
+              }
+            },
+            types: ['establishment']
+          }];
+        }
+      }
+    } catch (bigDataError) {
+      console.warn('BigDataCloud forward geocoding failed:', bigDataError);
+    }
+    
+    console.error('All forward geocoding services failed:', error);
     return [];
   }
 }

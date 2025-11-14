@@ -1,6 +1,55 @@
 // OSRM (Open Source Routing Machine) API integration
 // Documentation: http://project-osrm.org/docs/v5.24.0/api/
 
+import { log, osrmConfig } from '../config/env';
+
+// Rate limiting configuration
+const RATE_LIMIT_DELAY = 1000; // 1 second between requests
+const MAX_RETRIES = 3;
+let lastRequestTime = 0;
+
+// Simple rate limiter
+async function rateLimit(): Promise<void> {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  
+  if (timeSinceLastRequest < RATE_LIMIT_DELAY) {
+    const delay = RATE_LIMIT_DELAY - timeSinceLastRequest;
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+  
+  lastRequestTime = Date.now();
+}
+
+// Retry wrapper for API calls
+async function withRetry<T>(
+  apiCall: () => Promise<T>,
+  retries: number = MAX_RETRIES
+): Promise<T> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await rateLimit();
+      return await apiCall();
+    } catch (error: any) {
+      if (error.message.includes('429') && attempt < retries) {
+        const backoffDelay = RATE_LIMIT_DELAY * attempt * 2; // Exponential backoff
+        log('warn', `🔄 OSRM API rate limited. Retrying in ${backoffDelay}ms (attempt ${attempt}/${retries})`);
+        await new Promise(resolve => setTimeout(resolve, backoffDelay));
+        continue;
+      }
+      
+      if (attempt === retries) {
+        throw error;
+      }
+      
+      // For other errors, wait a bit and retry
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  throw new Error('Max retries exceeded');
+}
+
 export interface OSRMCoordinate {
   lat: number;
   lng: number;
@@ -59,8 +108,6 @@ export interface OSRMRouteResponse {
   routes: OSRMRoute[];
 }
 
-import { osrmConfig, log } from '../config/env';
-
 // Base OSRM API URL from configuration
 const OSRM_BASE_URL = osrmConfig.baseUrl;
 
@@ -108,7 +155,7 @@ export async function getOptimizedTrip(
   
   log('info', '🗺️ OSRM Trip API Request:', url);
 
-  try {
+  return withRetry(async () => {
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -123,10 +170,7 @@ export async function getOptimizedTrip(
 
     log('info', '✅ OSRM Trip API Response:', data);
     return data;
-  } catch (error) {
-    log('error', '❌ OSRM Trip API Error:', error);
-    throw error;
-  }
+  });
 }
 
 /**
@@ -155,7 +199,7 @@ export async function getRoute(
   
   log('info', '🗺️ OSRM Route API Request:', url);
 
-  try {
+  return withRetry(async () => {
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -170,10 +214,7 @@ export async function getRoute(
 
     log('info', '✅ OSRM Route API Response:', data);
     return data;
-  } catch (error) {
-    log('error', '❌ OSRM Route API Error:', error);
-    throw error;
-  }
+  });
 }
 
 /**

@@ -32,7 +32,8 @@ function calculateFitness(route: number[], distanceMatrix: number[][]): number {
     // Validate indices and matrix values
     if (fromIndex >= 0 && fromIndex < distanceMatrix.length && 
         toIndex >= 0 && toIndex < distanceMatrix.length &&
-        distanceMatrix[fromIndex] && distanceMatrix[fromIndex][toIndex] !== undefined) {
+        distanceMatrix[fromIndex] && distanceMatrix[fromIndex] !== null &&
+        distanceMatrix[fromIndex][toIndex] !== undefined && distanceMatrix[fromIndex][toIndex] !== null) {
       totalDistance += distanceMatrix[fromIndex][toIndex];
     } else {
       console.warn(`Invalid distance matrix access: [${fromIndex}][${toIndex}]`);
@@ -45,7 +46,8 @@ function calculateFitness(route: number[], distanceMatrix: number[][]): number {
   const firstIndex = route[0];
   if (lastIndex >= 0 && lastIndex < distanceMatrix.length && 
       firstIndex >= 0 && firstIndex < distanceMatrix.length &&
-      distanceMatrix[lastIndex] && distanceMatrix[lastIndex][firstIndex] !== undefined) {
+      distanceMatrix[lastIndex] && distanceMatrix[lastIndex] !== null &&
+      distanceMatrix[lastIndex][firstIndex] !== undefined && distanceMatrix[lastIndex][firstIndex] !== null) {
     totalDistance += distanceMatrix[lastIndex][firstIndex];
   } else {
     console.warn(`Invalid distance matrix access for return: [${lastIndex}][${firstIndex}]`);
@@ -265,7 +267,9 @@ export function nearestNeighborTSP(distanceMatrix: number[][]): TSPSolution {
     let nearestDist = Infinity;
     
     for (let i = 0; i < n; i++) {
-      if (!visited.has(i) && distanceMatrix[current][i] < nearestDist) {
+      if (!visited.has(i) && 
+          distanceMatrix[current] && distanceMatrix[current][i] !== null && 
+          distanceMatrix[current][i] < nearestDist) {
         nearest = i;
         nearestDist = distanceMatrix[current][i];
       }
@@ -274,15 +278,32 @@ export function nearestNeighborTSP(distanceMatrix: number[][]): TSPSolution {
     if (nearest !== -1) {
       route.push(nearest);
       visited.add(nearest);
+    } else {
+      // If no valid nearest neighbor found, add the next unvisited point
+      for (let i = 0; i < n; i++) {
+        if (!visited.has(i)) {
+          route.push(i);
+          visited.add(i);
+          break;
+        }
+      }
     }
   }
   
   const fitness = calculateFitness(route, distanceMatrix);
   let totalDistance = 0;
   for (let i = 0; i < route.length - 1; i++) {
-    totalDistance += distanceMatrix[route[i]][route[i + 1]];
+    if (distanceMatrix[route[i]] && distanceMatrix[route[i]][route[i + 1]] !== null) {
+      totalDistance += distanceMatrix[route[i]][route[i + 1]];
+    } else {
+      totalDistance += 999; // Use large distance for invalid segments
+    }
   }
-  totalDistance += distanceMatrix[route[route.length - 1]][route[0]];
+  if (distanceMatrix[route[route.length - 1]] && distanceMatrix[route[route.length - 1]][route[0]] !== null) {
+    totalDistance += distanceMatrix[route[route.length - 1]][route[0]];
+  } else {
+    totalDistance += 999;
+  }
   
   return { route, totalDistance, fitness };
 }

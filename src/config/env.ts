@@ -44,7 +44,7 @@ export interface AppConfig {
 const defaultConfig: AppConfig = {
   googleMaps: {
     apiKey: '',
-    libraries: ['places', 'geometry', 'directions']
+    libraries: ['places', 'geometry', 'drawing', 'marker']
   },
   osrm: {
     baseUrl: 'https://router.project-osrm.org'
