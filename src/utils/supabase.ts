@@ -6,19 +6,32 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Replace with your Supabase URL and anon key
-const SUPABASE_URL = ((import.meta as any).env.VITE_SUPABASE_URL || '') as string;
-const SUPABASE_ANON_KEY = ((import.meta as any).env.VITE_SUPABASE_ANON_KEY || '') as string;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-// Check if credentials are available
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === 'https://placeholder.supabase.co') {
+// Check if credentials are available and valid
+const isValidSupabaseUrl = (url: string) => {
+  try {
+    new URL(url);
+    return url && url !== 'your_supabase_project_url_here' && !url.includes('placeholder');
+  } catch {
+    return false;
+  }
+};
+
+const hasValidCredentials = isValidSupabaseUrl(SUPABASE_URL) && 
+  SUPABASE_ANON_KEY && 
+  SUPABASE_ANON_KEY !== 'your_supabase_anon_key_here';
+
+if (!hasValidCredentials) {
   console.warn('⚠️ Supabase credentials not configured. Using local authentication.');
   console.warn('To fix this, add your Supabase URL and anon key to the .env file');
 }
 
 // Create client only if valid credentials are provided
-export const supabase = (!SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL === 'https://placeholder.supabase.co') 
-  ? null 
-  : createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = hasValidCredentials 
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
 
 /**
  * User type for authentication

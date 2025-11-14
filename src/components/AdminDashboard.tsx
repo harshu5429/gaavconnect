@@ -3,7 +3,7 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { Card } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { TrendingUp, Users, MapPin, Activity } from 'lucide-react';
-import { getStats } from '../utils/api';
+import { getStatsFromAPI as getStats } from '../utils/api';
 import type { Stats } from '../utils/api';
 
 const routeUsageData = [

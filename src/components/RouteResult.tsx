@@ -1,17 +1,19 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { ArrowLeft, MapPin, Clock, DollarSign, TrendingUp, Bus, Footprints, Car, Bike, Save, Check } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Progress } from './ui/progress';
-import { MapView } from './MapView';
+import LeafletMap from './LeafletMap';
 import { RouteExport } from './RouteExport';
 import { RouteDetails } from './RouteDetails';
 import { OSRMProfessionalFeatures } from './OSRMProfessionalFeatures';
 import { toast } from 'sonner';
 import { saveRoute } from '../utils/api';
+import { useOSRMRouting } from '../hooks/useOSRMRouting';
 import type { OptimizedRoute } from '../App';
+import type { OSRMCoordinate } from '../utils/osrmApi';
 
 interface RouteResultProps {
   route: OptimizedRoute;
@@ -44,9 +46,23 @@ export function RouteResult({ route, allRoutes = [], onBack }: RouteResultProps)
   const [isSaved, setIsSaved] = useState(false);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
 
+  // OSRM routing hook
+  const { route: osrmRoute, loading, error, calculateRoute, getOSRMRoute, getRouteMetrics } = useOSRMRouting();
+
   // Use actual generated routes or fallback to current route
   const routeOptions = allRoutes.length > 0 ? allRoutes : [route];
   const currentRoute = routeOptions[selectedRouteIndex] || route;
+
+  // Calculate OSRM route for current route if not already calculated
+  React.useEffect(() => {
+    if (currentRoute.stops.length > 0 && !osrmRoute) {
+      const coordinates: OSRMCoordinate[] = currentRoute.stops.map(stop => ({
+        lat: stop.lat,
+        lng: stop.lng
+      }));
+      calculateRoute(coordinates);
+    }
+  }, [currentRoute.stops, osrmRoute, calculateRoute]);
 
   // Create route type labels based on algorithm
   const getRouteTypeLabel = (algorithm: string) => {
@@ -239,11 +255,15 @@ export function RouteResult({ route, allRoutes = [], onBack }: RouteResultProps)
           </div>
         </div>
 
-        <MapView 
-          origin={currentRoute.segments[0]?.from} 
-          stops={currentRoute.stops} 
+        <LeafletMap 
+          center={currentRoute.stops.length > 0 ? [currentRoute.stops[0].lat, currentRoute.stops[0].lng] : [17.3850, 78.4867]}
+          zoom={12}
+          coordinates={currentRoute.stops.map(stop => ({ lat: stop.lat, lng: stop.lng }))}
+          route={getOSRMRoute() || undefined}
           showRoute={true} 
           height="450px" 
+          showWaypoints={true}
+          interactive={true}
         />
 
         {/* OSRM Status Footer */}
